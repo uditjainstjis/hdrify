@@ -2,3 +2,6 @@
 .vercel
 node_modules
 test.jpg
+out/
+__pycache__/
+outrgb.raw

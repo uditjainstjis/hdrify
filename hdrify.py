@@ -130,27 +130,60 @@ def hdrify_image(src, dst, boost=16.0, knee=0.0, warmth=0.0, vivid=1.0,
 
 # ---------------------------------------------------------------- videos ----
 
-def _pq_expr(nits):
-    """ffmpeg lutrgb expression: sRGB code value -> PQ code value at `nits`."""
-    lin = "if(lte(val/maxval,0.04045),(val/maxval)/12.92,pow(((val/maxval)+0.055)/1.055,2.4))"
-    y = f"({lin})*{nits / 10000.0:.9f}"
+def _srgb_to_linear_expr():
+    """ffmpeg lutrgb expression: sRGB code value -> linear light, rescaled to full range."""
+    v = "(val/maxval)"
+    return (f"clip(if(lte({v},0.04045),{v}/12.92,"
+            f"pow(({v}+0.055)/1.055,2.4))*maxval,0,maxval)")
+
+
+REFERENCE_WHITE = 203.0   # nits; the SDR diffuse-white anchor used by BT.2408
+
+
+def _linear_to_pq_expr(nits, knee=0.5):
+    """ffmpeg lutrgb expression: linear light -> PQ code value.
+
+    Scaling the whole picture so SDR white lands on `nits` makes every midtone
+    several times too bright: mid-grey ends up around 334 nits instead of ~44.
+    Chrome hides this by tone-mapping, but a faithful player (QuickTime) shows
+    it blown out and washed. So anchor diffuse white at the BT.2408 reference of
+    203 nits and spend the extra range only above `knee`, which is what actually
+    reads as "normal picture, glowing highlights"."""
+    L = "(val/maxval)"
+    t = f"clip(({L}-{knee:.6f})/{max(1e-6, 1.0 - knee):.6f},0,1)"
+    scale = f"({REFERENCE_WHITE:.1f}+{max(0.0, nits - REFERENCE_WHITE):.4f}*{t})"
+    y = f"{L}*{scale}/10000"
     n = f"pow({y},0.1593017578125)"
     return f"clip(pow((0.8359375+18.8515625*{n})/(1+18.6875*{n}),78.84375)*maxval,0,maxval)"
 
 
-def hdrify_video(src, dst, nits=1600, crf=18):
+# sRGB(D65) -> BT.2020(D65) primaries, applied in LINEAR light.
+# PQ is essentially always paired with BT.2020: tagging PQ content as bt709
+# produces a file Chrome will render but QuickTime washes out. So convert the
+# gamut for real rather than mislabelling it.
+_SRGB_TO_BT2020 = ("colorchannelmixer="
+                   "rr=0.6274:rg=0.3293:rb=0.0433:"
+                   "gr=0.0691:gg=0.9195:gb=0.0114:"
+                   "br=0.0164:bg=0.0880:bb=0.8956")
+
+
+def hdrify_video(src, dst, nits=1600, knee=0.5, crf=18):
     _need("ffmpeg")
-    e = _pq_expr(nits)
-    vf = (f"format=rgb48,lutrgb=r='{e}':g='{e}':b='{e}',"
-          "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p10le")
+    lin = _srgb_to_linear_expr()
+    pq = _linear_to_pq_expr(nits, knee)
+    vf = ("format=rgb48,"
+          f"lutrgb=r='{lin}':g='{lin}':b='{lin}',"      # to linear light
+          f"{_SRGB_TO_BT2020},"                          # sRGB -> BT.2020 gamut
+          f"lutrgb=r='{pq}':g='{pq}':b='{pq}',"          # linear -> PQ
+          "scale=out_color_matrix=bt2020nc:out_range=tv,format=yuv420p10le")
     subprocess.run(
         ["ffmpeg", "-y", "-i", src, "-vf", vf,
          "-c:v", "libx265", "-crf", str(crf), "-preset", "medium",
          "-pix_fmt", "yuv420p10le", "-tag:v", "hvc1",
-         "-color_primaries", "bt709", "-color_trc", "smpte2084",
-         "-colorspace", "bt709",
+         "-color_primaries", "bt2020", "-color_trc", "smpte2084",
+         "-colorspace", "bt2020nc", "-color_range", "tv",
          "-x265-params",
-         "colorprim=bt709:transfer=smpte2084:colormatrix=bt709",
+         "colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:range=limited",
          "-c:a", "copy", "-movflags", "+faststart", dst],
         check=True, capture_output=True)
     return dst
@@ -165,7 +198,7 @@ def hdrify(src, dst=None, boost=16.0, knee=0.0, nits=1600, warmth=0.0, vivid=1.0
         return hdrify_image(src, dst, boost=boost, knee=knee, warmth=warmth, vivid=vivid, glow=glow)
     if ext in VIDEO_EXT:
         dst = dst or os.path.splitext(src)[0] + "_hdr.mp4"
-        return hdrify_video(src, dst, nits=nits)
+        return hdrify_video(src, dst, nits=nits, knee=knee if knee > 0 else 0.5)
     sys.exit(f"unsupported file type: {ext}")
 
 
