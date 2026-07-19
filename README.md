@@ -3,7 +3,7 @@
 Make any photo render **far brighter than white** on HDR displays — MacBook XDR, iPhone,
 recent iPads. Runs entirely in your browser. Nothing is uploaded.
 
-**→ [Try it](https://hdrify.vercel.app)**
+**→ [Try it](https://uditjainstjis.github.io/hdrify/)**
 
 ## What it actually does
 
