@@ -1,30 +1,61 @@
 <!doctype html>
-<html lang=en>
-<meta charset=utf-8>
-<title>hdrify — make any photo glow past white</title>
-<meta name=viewport content="width=device-width,initial-scale=1">
-<meta name=description content="Turn any photo into an Ultra HDR JPEG that renders far above SDR white on Android, MacBook XDR and iPhone. Runs entirely in your browser — nothing is uploaded.">
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ultra HDR Converter — Make Any Photo Glow Past White | hdrify</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Free Ultra HDR converter: turn any photo into a gain-map JPEG that glows brighter than white on Android, Mac and iPhone. Runs in your browser, nothing uploaded.">
+<meta name="theme-color" content="#08080a">
+<meta name="color-scheme" content="dark">
+<link rel="canonical" href="https://hdrify-web.vercel.app/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="hdrify">
+<meta property="og:url" content="https://hdrify-web.vercel.app/">
+<meta property="og:title" content="Ultra HDR Converter — Make Any Photo Glow Past White">
+<meta property="og:description" content="Free, in-browser Ultra HDR converter. Add a gain map to any photo so it renders far above SDR white on HDR displays. No upload, no signup.">
+<meta property="og:image" content="https://hdrify-web.vercel.app/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="hdrify — make any photo glow past white. A brightness ramp climbing from SDR white into HDR headroom.">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ultra HDR Converter — Make Any Photo Glow Past White">
+<meta name="twitter:description" content="Free, in-browser Ultra HDR converter. Add a gain map to any photo so it renders far above SDR white on HDR displays. No upload, no signup.">
+<meta name="twitter:image" content="https://hdrify-web.vercel.app/og.png">
+<meta name="twitter:image:alt" content="hdrify — make any photo glow past white.">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2308080a'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%238b7bff'/%3E%3C/svg%3E">
+<link rel="modulepreload" href="./app.js">
+
 <style>
-:root{color-scheme:dark;--bg:#08080a;--line:#232329;--dim:#7d7d87;--fg:#ececf0;--acc:#8b7bff}
+:root{color-scheme:dark;--bg:#08080a;--line:#232329;--dim:#8b8b96;--fg:#ececf0;--acc:#8b7bff}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
      font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
 header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
        padding:20px 28px;border-bottom:1px solid var(--line)}
-h1{font-size:16px;margin:0;letter-spacing:-.01em}
-header span{color:var(--dim);font-size:13px}
+.brand{font-size:16px;margin:0;letter-spacing:-.01em;font-weight:600}
+header .tag{color:var(--dim);font-size:13px}
 header .spacer{flex:1}
 header a{color:var(--dim);font-size:12.5px;text-decoration:none}
-header a:hover{color:var(--fg)}
-main{display:grid;grid-template-columns:1fr 320px;min-height:calc(100vh - 61px)}
+header a:hover,header a:focus-visible{color:var(--fg)}
+main{display:grid;grid-template-columns:1fr 320px}
 @media(max-width:900px){main{grid-template-columns:1fr}}
 
-#stage{padding:28px;display:grid;place-items:center;place-content:center}
+#stage{padding:56px 28px 48px;display:grid;justify-items:center;align-content:start;
+       min-height:min(72vh,620px)}
+#stage h1{font-size:23px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px;text-align:center;
+          max-width:640px;line-height:1.3}
+.sub-h1{margin:0 0 26px;max-width:560px;text-align:center;color:var(--dim);font-size:13.5px;
+        line-height:1.6}
+@media(max-width:640px){#stage h1{font-size:20px}}
 #drop{width:100%;max-width:640px;border:1.5px dashed var(--line);border-radius:16px;
-      padding:72px 24px;text-align:center;color:var(--dim);cursor:pointer;transition:.15s}
-#drop:hover,#drop.on{border-color:var(--acc);color:var(--fg);background:#101017}
-#drop b{display:block;color:var(--fg);font-weight:500;margin-bottom:6px}
-#drop .sub{display:inline-block;margin-top:10px;font-size:12px;color:#5f5f68}
+      padding:60px 24px;text-align:center;color:var(--dim);cursor:pointer;transition:.15s}
+#drop:hover,#drop.on,#drop:focus-visible{border-color:var(--acc);color:var(--fg);background:#101017}
+#drop b{display:block;color:var(--fg);font-weight:500;margin-bottom:6px;font-size:15px}
+#drop .sub{display:inline-block;margin-top:10px;font-size:12px;color:#74747f}
 
 #compare{display:none;width:100%;gap:20px;grid-template-columns:1fr 1fr}
 @media(max-width:640px){#compare{grid-template-columns:1fr}}
@@ -46,81 +77,131 @@ aside{border-left:1px solid var(--line);padding:24px;display:flex;flex-direction
 input[type=range]{width:100%;accent-color:var(--acc);margin:0}
 button{background:var(--acc);color:#0b0b10;border:0;border-radius:9px;padding:11px 14px;
        font:inherit;font-weight:600;cursor:pointer}
-button:disabled{opacity:.4;cursor:default}
+button:disabled{opacity:.45;cursor:default}
 button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 #presets{display:flex;flex-wrap:wrap;gap:8px}
 .chip{background:#141419;color:var(--dim);border:1px solid var(--line);border-radius:999px;
       padding:6px 13px;font-size:12.5px;font-weight:400}
-.chip:hover{color:var(--fg);border-color:var(--acc)}
+.chip:hover,.chip:focus-visible{color:var(--fg);border-color:var(--acc)}
 .note{color:var(--dim);font-size:11.5px;line-height:1.5;border-top:1px solid var(--line);padding-top:16px}
-.err{color:#ff8080;font-size:12.5px}
+.err{color:#ff9090;font-size:12.5px}
+.err:empty{display:none}
 .hide{display:none!important}
+
+/* ---- editorial content below the tool ---- */
+.prose{border-top:1px solid var(--line);padding:56px 28px 72px}
+.prose .wrap{max-width:760px;margin:0 auto}
+.prose h2{font-size:22px;letter-spacing:-.01em;margin:56px 0 14px;font-weight:600}
+.prose section:first-of-type h2{margin-top:0}
+.prose h3{font-size:15px;margin:26px 0 8px;font-weight:600}
+.prose p,.prose li{color:#bfbfca;font-size:14.5px;line-height:1.72}
+.prose p{margin:0 0 14px}
+.prose ul,.prose ol{padding-left:20px;margin:0 0 14px}
+.prose li{margin-bottom:7px}
+.prose strong{color:var(--fg);font-weight:600}
+.prose code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+            background:#141419;border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.prose a{color:var(--acc)}
+.lede{font-size:16px!important;color:#d2d2dc!important}
+.tbl{width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13.5px;display:block;overflow-x:auto}
+.tbl th,.tbl td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);
+                vertical-align:top;color:#bfbfca}
+.tbl th{color:var(--fg);font-weight:600;white-space:nowrap}
+.tbl tr:first-child th{border-bottom-color:#33333b}
+details{border-bottom:1px solid var(--line)}
+details summary{cursor:pointer;padding:15px 0;font-weight:500;font-size:14.5px;color:var(--fg);
+                list-style:none;display:flex;justify-content:space-between;gap:16px;align-items:baseline}
+details summary::-webkit-details-marker{display:none}
+details summary::after{content:"+";color:var(--acc);font-size:16px}
+details[open] summary::after{content:"–"}
+details .body{padding:0 0 16px}
+details .body p:last-child{margin-bottom:0}
+.prose a.cta{display:inline-block;background:var(--acc);color:#0b0b10;font-weight:600;
+     border-radius:9px;padding:12px 20px;text-decoration:none;margin-top:8px}
+.prose a.cta:hover{background:#9d8fff}
+footer{border-top:1px solid var(--line);padding:26px 28px;color:var(--dim);font-size:12.5px}
+footer a{color:var(--dim)}
 </style>
+</head>
+<body>
 
 <header>
-  <h1>hdrify</h1>
-  <span id=status>drop an image to begin</span>
-  <span class=spacer></span>
-  <a href="https://github.com/uditjainstjis/hdrify" target=_blank rel=noopener>source</a>
+  <p class="brand">hdrify</p>
+  <span class="tag" id="status" role="status" aria-live="polite">drop an image to begin</span>
+  <span class="spacer"></span>
+  <a href="#what-is-ultra-hdr">How it works</a>
+  <a href="https://github.com/uditjainstjis/hdrify" target="_blank" rel="noopener">Source on GitHub</a>
 </header>
 
 <main>
-  <section id=stage>
-    <div id=drop>
+  <section id="stage" aria-label="Ultra HDR converter">
+    <h1>Ultra HDR converter — make any photo glow past white</h1>
+    <p class="sub-h1">Free, in your browser, nothing uploaded. Adds a gain map so your photo renders
+    far above SDR white on Android, MacBook XDR, iPhone and iPad.</p>
+
+    <div id="drop" role="button" tabindex="0"
+         aria-label="Choose an image to convert to Ultra HDR, or drag and drop one here">
       <b>Drop an image here</b>
       or click to pick — it never leaves your device<br>
-      <span class=sub>Glows on Android 14+, MacBook XDR, iPhone &amp; iPad</span>
-      <input type=file id=file hidden accept="image/*">
+      <span class="sub">Glows on Android 14+, MacBook XDR, iPhone &amp; iPad</span>
     </div>
-    <div id=compare>
+    <input type="file" id="file" hidden accept="image/*" aria-label="Image file to convert">
+
+    <div id="compare">
       <figure><figcaption>Original · <b>SDR</b></figcaption>
-        <div class=frame id=fa></div></figure>
+        <div class="frame" id="fa" aria-label="Your original standard dynamic range image"></div></figure>
       <figure><figcaption>hdrify · <b>Ultra HDR</b></figcaption>
-        <div class=frame id=fb></div></figure>
+        <div class="frame" id="fb" aria-label="The converted Ultra HDR result — it glows only on an HDR display"></div></figure>
     </div>
   </section>
 
-  <aside>
-    <div id=presets></div>
+  <aside aria-label="Ultra HDR settings">
+    <div id="presets" role="group" aria-label="Presets"></div>
 
-    <div class=ctl>
-      <div class=top><label for=boost>Brightness boost</label><output id=o-boost>16.0×</output></div>
-      <input type=range id=boost min=1 max=64 step=.5 value=16>
-      <small>Flat gain in linear light — colours and contrast stay pixel-identical, the whole
+    <div class="ctl">
+      <div class="top"><label for="boost">Brightness boost</label><output id="o-boost" for="boost">16.0×</output></div>
+      <input type="range" id="boost" min="1" max="64" step=".5" value="16"
+             aria-describedby="d-boost">
+      <small id="d-boost">Flat gain in linear light — colours and contrast stay pixel-identical, the whole
       picture just renders this many times above SDR white.</small>
     </div>
 
-    <div class=ctl>
-      <div class=top><label for=knee>Highlights only</label><output id=o-knee>off</output></div>
-      <input type=range id=knee min=0 max=.9 step=.05 value=0>
-      <small>Above 0 the boost is spent on bright areas only, so highlights bloom out of an
+    <div class="ctl">
+      <div class="top"><label for="knee">Highlights only</label><output id="o-knee" for="knee">off</output></div>
+      <input type="range" id="knee" min="0" max=".9" step=".05" value="0"
+             aria-describedby="d-knee">
+      <small id="d-knee">Above 0 the boost is spent on bright areas only, so highlights bloom out of an
       otherwise normal picture.</small>
     </div>
 
-    <div class=ctl>
-      <div class=top><label for=warmth>Warmth</label><output id=o-warmth>0.00</output></div>
-      <input type=range id=warmth min=-1 max=1 step=.05 value=0>
-      <small>Splits the boost per channel — the golden/orange cast. Graded into the HDR layer
+    <div class="ctl">
+      <div class="top"><label for="warmth">Warmth</label><output id="o-warmth" for="warmth">0.00</output></div>
+      <input type="range" id="warmth" min="-1" max="1" step=".05" value="0"
+             aria-describedby="d-warmth">
+      <small id="d-warmth">Splits the boost per channel — the golden/orange cast. Graded into the HDR layer
       only, so the SDR fallback stays neutral.</small>
     </div>
 
-    <div class=ctl>
-      <div class=top><label for=vivid>Vividness</label><output id=o-vivid>1.00</output></div>
-      <input type=range id=vivid min=0 max=2.5 step=.05 value=1>
-      <small>Saturation of the HDR intent. Below 1 the highlights bleach toward white.</small>
+    <div class="ctl">
+      <div class="top"><label for="vivid">Vividness</label><output id="o-vivid" for="vivid">1.00</output></div>
+      <input type="range" id="vivid" min="0" max="2.5" step=".05" value="1"
+             aria-describedby="d-vivid">
+      <small id="d-vivid">Saturation of the HDR intent. Below 1 the highlights bleach toward white.</small>
     </div>
 
-    <div class=ctl>
-      <div class=top><label for=glow>Bloom</label><output id=o-glow>off</output></div>
-      <input type=range id=glow min=0 max=1 step=.05 value=0>
-      <small>Light spilling off the bright areas, the way real overexposure blooms.</small>
+    <div class="ctl">
+      <div class="top"><label for="glow">Bloom</label><output id="o-glow" for="glow">off</output></div>
+      <input type="range" id="glow" min="0" max="1" step=".05" value="0"
+             aria-describedby="d-glow">
+      <small id="d-glow">Light spilling off the bright areas, the way real overexposure blooms.</small>
     </div>
 
-    <button id=dl disabled>Download HDR image</button>
-    <button class=ghost id=reset>New image</button>
-    <div id=error class=err></div>
+    <button id="dl" disabled>Download HDR image</button>
+    <button class="ghost" id="reset">New image</button>
+    <div id="error" class="err" role="alert"></div>
 
-    <div class=note>
+    <div class="note">
       Everything runs locally in this tab — no upload, no server.<br><br>
       <b>Where it glows:</b> Android 14+ (Ultra HDR is Google's own format — it's native there),
       macOS Sonoma+, iOS 18+. Anywhere else the file falls back to your original photo, so it's
@@ -132,5 +213,377 @@ button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line
   </aside>
 </main>
 
+<article class="prose">
+<div class="wrap">
+
+  <section id="what-is-ultra-hdr">
+    <h2>What Ultra HDR actually is</h2>
+    <p class="lede">Ultra HDR is a way of packing a high dynamic range picture inside an ordinary
+    JPEG, so that HDR screens show it glowing far above white while everything else quietly shows
+    the normal photo.</p>
+    <p>A regular JPEG can only describe brightness up to "white" — code value 255. On a modern
+    display, that white is nowhere near as bright as the panel can go. A MacBook Pro XDR panel,
+    a recent Android flagship or an iPhone can push highlights several times brighter than the
+    white of the page around them. Standard image formats have no way to ask for that.</p>
+    <p>An Ultra HDR file solves it by carrying two things instead of one:</p>
+    <ul>
+      <li>a <strong>base image</strong> — a completely ordinary SDR JPEG, exactly the picture you
+      started with;</li>
+      <li>a <strong>gain map</strong> — a second, smaller JPEG in the same file, whose pixels are
+      not colours but <em>multipliers</em>: how much brighter each pixel should render on a display
+      that has the headroom for it.</li>
+    </ul>
+    <p>Two more pieces glue them together: an <strong>XMP metadata packet</strong> in the
+    <code>hdrgm</code> namespace describing the range the gain map was encoded against, and an
+    <strong>MPF (Multi-Picture Format) index</strong> telling a decoder where the second image
+    starts inside the file.</p>
+    <p>The format was published by Google for Android and uses an encoding scheme developed by
+    Adobe; a closely related mechanism is standardised as ISO 21496-1, which is what Apple's
+    platforms adopted. That is why one file can glow on both.</p>
+  </section>
+
+  <section id="how-gain-maps-work">
+    <h2>How gain maps work</h2>
+    <p>The gain map stores, per pixel and per channel, the base-2 logarithm of the ratio between
+    the HDR rendition and the SDR one, normalised into the 0–255 range of an 8-bit image. The
+    minimum and maximum of that range travel in the metadata as <code>GainMapMin</code> and
+    <code>GainMapMax</code>. A decoder reverses the normalisation and applies:</p>
+    <p><code>hdr = sdr × 2 ^ (log_boost × weight)</code></p>
+    <p>The <em>weight</em> is the important part. It is derived from how much headroom the display
+    actually has right now. On a screen with no headroom it lands at zero, the multiplier collapses
+    to 1, and you see the untouched SDR photo. On a screen with plenty of headroom it goes to one
+    and you get the full effect. In between, you get a proportional amount. Nothing clips and
+    nothing breaks — the format degrades smoothly rather than failing.</p>
+    <h3>Why hdrify's default preset changes nothing but brightness</h3>
+    <p>If the gain map is a <em>flat</em> value — the same multiplier everywhere, applied in linear
+    light — then mathematically the operation cannot touch hue, saturation or contrast ratios. It
+    is a scalar on a linear-light triple. That is what the <strong>Untouched</strong> preset does:
+    the picture is pixel-for-pixel the same photograph, just rendered several times brighter than
+    the white of the page it sits on. The other controls deliberately break that neutrality — a
+    knee spends the boost on highlights only, warmth splits it per channel, bloom spills light off
+    bright regions — but only inside the HDR layer, so the SDR fallback stays the original picture.</p>
+  </section>
+
+  <section id="how-to">
+    <h2>How to convert a photo to Ultra HDR</h2>
+    <ol>
+      <li><strong>Drop a photo in</strong> — JPEG, PNG, WebP, anything your browser can decode. It
+      is read straight from disk into this tab; no file is uploaded anywhere.</li>
+      <li><strong>Pick a preset.</strong> <em>Untouched</em> for a faithful photo that simply glows.
+      <em>Golden</em> for a warm highlight bloom. <em>Neon</em> for a cool, saturated look.
+      <em>Blowout</em> for a deliberately overexposed one.</li>
+      <li><strong>Adjust the boost.</strong> This is the headline number: how many times above SDR
+      white the picture renders. Values around 8–16× read as convincingly bright without looking
+      broken on modest displays.</li>
+      <li><strong>Check the right-hand preview</strong> on an HDR display, with brightness not at
+      maximum. If it looks identical to the left, you have no headroom to see the difference — the
+      file is still correct.</li>
+      <li><strong>Download.</strong> You get a single <code>.jpg</code>. Anything that cannot read
+      gain maps just shows your original photo.</li>
+    </ol>
+  </section>
+
+  <section id="device-support">
+    <h2>Which devices and browsers show the glow</h2>
+    <p>Three things must all be true at once: the file has a gain map, the software understands it,
+    and the display has spare brightness headroom to render into.</p>
+    <table class="tbl">
+      <tr><th scope="col">Platform</th><th scope="col">Ultra HDR / gain-map JPEG</th></tr>
+      <tr><td>Android 14+</td><td>Native — Ultra HDR is Google's own format, and the system photo viewer renders it.</td></tr>
+      <tr><td>macOS Sonoma and later</td><td>Yes, on an HDR-capable panel (MacBook Pro XDR, Pro Display XDR, and other HDR monitors).</td></tr>
+      <tr><td>iOS / iPadOS 18+</td><td>Yes, in Photos and system previews.</td></tr>
+      <tr><td>Chrome and Chromium browsers</td><td>Render gain-map JPEGs on HDR displays across desktop platforms.</td></tr>
+      <tr><td>Safari</td><td>Recent versions render HDR photos on Apple HDR displays.</td></tr>
+      <tr><td>Firefox</td><td>Gain-map rendering is not supported at time of writing — you see the SDR base image.</td></tr>
+      <tr><td>Older Android, Windows SDR monitors, anything else</td><td>Shows the plain original photo. No errors, no artefacts.</td></tr>
+    </table>
+    <h3>The headroom catch</h3>
+    <p>Even on a perfectly capable device, the effect disappears if the screen is already at maximum
+    brightness — there is no headroom left to boost into. Turn the brightness down a few notches and
+    it appears. Low-power mode and some battery-saver settings also disable HDR rendering entirely.
+    This surprises far more people than the format itself does.</p>
+  </section>
+
+  <section id="where-it-survives">
+    <h2>Where the effect survives being uploaded — and where it dies</h2>
+    <p>The gain map lives in a second image plus metadata inside the file. Any service that
+    re-encodes, resizes or strips metadata on upload destroys it. That is most of them, and it is
+    the single biggest source of disappointment with HDR photos.</p>
+    <h3>It reliably dies here</h3>
+    <ul>
+      <li><strong>LinkedIn profile pictures.</strong> Measured: the upload is re-encoded down to
+      100×100 pixels, roughly 4 KB, a single JPEG segment with every piece of metadata gone. There
+      is nothing left of the gain map.</li>
+      <li><strong>Screenshots.</strong> A screenshot captures the rendered SDR pixels, not the file.</li>
+      <li><strong>Any "save as" or edit pass</strong> through a tool that does not itself understand
+      gain maps — including most crops, filters and compressors.</li>
+      <li><strong>Services that transcode aggressively</strong> to save bandwidth. If a platform
+      shrinks your 4 MB photo to 300 KB, the gain map is not coming with it.</li>
+    </ul>
+    <h3>It can survive here</h3>
+    <ul>
+      <li><strong>Direct file transfer</strong> — AirDrop, a cloud-storage link, email attachment,
+      anything that moves the bytes rather than re-encoding them.</li>
+      <li><strong>Photo libraries</strong> on Android and Apple platforms, which are gain-map aware.</li>
+      <li><strong>Some feed uploads on some platforms</strong>, sometimes. Instagram and Threads have
+      added HDR photo support, but whether it survives depends on the client, the upload path and
+      whether you touched the in-app editor — applying a filter or cropping in the composer generally
+      re-renders to SDR. Test it before you rely on it.</li>
+    </ul>
+    <p>The honest summary: treat the glow as a bonus that appears on direct shares and modern
+    galleries, not as something you can guarantee on any given social platform. Because the fallback
+    is your untouched original, there is no downside to trying.</p>
+  </section>
+
+  <section id="privacy">
+    <h2>Privacy: nothing is uploaded</h2>
+    <p>hdrify is a static page. The conversion runs in your browser using Canvas and a vendored,
+    MIT-licensed copy of libultrahdr — there is no server, no account, no queue, no watermark, and
+    no upload step to opt out of. You can verify it: open your browser's network tab, convert a
+    photo, and watch that no request leaves. The page loads no third-party scripts, fonts or
+    analytics either.</p>
+    <p>A practical consequence: large images are limited by your own device's memory and CPU, not by
+    a plan tier. A very large photo on a phone may take a few seconds.</p>
+  </section>
+
+  <section id="faq">
+    <h2>Frequently asked questions</h2>
+
+    <details><summary>Is hdrify free?</summary><div class="body">
+      <p>Yes — completely free, with no account, no export limit, no resolution cap and no watermark.
+      It is an open-source static page; the conversion happens on your own device, so there is
+      nothing for anyone to charge for.</p>
+    </div></details>
+
+    <details><summary>Does my photo get uploaded to a server?</summary><div class="body">
+      <p>No. The encoder runs entirely in your browser tab. There is no backend. Your image never
+      leaves your device, which you can confirm in your browser's network inspector.</p>
+    </div></details>
+
+    <details><summary>Why does my converted photo look exactly the same?</summary><div class="body">
+      <p>Almost always one of three reasons: your display is not HDR-capable; your screen brightness
+      is already at maximum, so there is no headroom left to boost into; or you are viewing it in
+      software that ignores gain maps, such as Firefox at the time of writing. Turn the brightness
+      down a few notches and view it in Chrome or Safari on an HDR display.</p>
+    </div></details>
+
+    <details><summary>Will an Ultra HDR file look wrong on old phones or SDR monitors?</summary><div class="body">
+      <p>No. Decoders that do not understand the gain map simply display the base JPEG, which is your
+      original photo. That backwards compatibility is the entire point of the format, so the file is
+      always safe to send to anyone.</p>
+    </div></details>
+
+    <details><summary>Does the glow survive uploading to LinkedIn, Instagram or WhatsApp?</summary><div class="body">
+      <p>LinkedIn profile pictures destroy it — we measured the upload being re-encoded to 100×100
+      pixels at roughly 4 KB with all metadata stripped. Most services that re-encode uploads strip
+      gain maps the same way. Instagram and Threads have added HDR photo support, but whether a given
+      upload keeps it depends on the client and upload path, and using the in-app editor generally
+      re-renders to SDR. Direct transfers such as AirDrop, cloud links and email attachments preserve
+      the file intact.</p>
+    </div></details>
+
+    <details><summary>Does hdrify change the colours of my photo?</summary><div class="body">
+      <p>Not on the default <em>Untouched</em> preset. It applies a flat multiplier in linear light,
+      which is mathematically incapable of altering hue, saturation or contrast ratios — the picture
+      is identical, just rendered brighter. The warmth, vividness, knee and bloom controls do change
+      the look, but only inside the HDR layer; the SDR fallback stays your original photo either way.</p>
+    </div></details>
+
+    <details><summary>What is the difference between Ultra HDR and an HDR photo from my camera?</summary><div class="body">
+      <p>A camera HDR mode usually merges several exposures into one well-exposed SDR image. Ultra HDR
+      is about <em>display</em>: it stores extra brightness information so a capable screen can render
+      highlights above SDR white. hdrify does not invent detail your photo never had — it maps the
+      photo you have into your display's headroom.</p>
+    </div></details>
+
+    <details><summary>What file formats can I put in, and what comes out?</summary><div class="body">
+      <p>Anything your browser can decode as an image goes in — JPEG, PNG, WebP, and usually HEIC on
+      Apple platforms. What comes out is always a single <code>.jpg</code>: an Ultra HDR JPEG
+      containing your SDR base image, the gain map, XMP metadata and an MPF index.</p>
+    </div></details>
+
+    <details><summary>Can I convert video too?</summary><div class="body">
+      <p>Not in the browser. The companion command-line tool, <code>hdrify.py</code> in the GitHub
+      repository, handles video by encoding HEVC 10-bit PQ (<code>smpte2084</code>).</p>
+    </div></details>
+
+    <p style="margin-top:28px"><a class="cta" href="#stage">Convert a photo now</a></p>
+  </section>
+
+</div>
+</article>
+
+<footer>
+  hdrify — a free, open-source, in-browser Ultra HDR converter. MIT licensed ·
+  <a href="https://github.com/uditjainstjis/hdrify" target="_blank" rel="noopener">Source on GitHub</a>
+</footer>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://hdrify-web.vercel.app/#app",
+      "name": "hdrify",
+      "alternateName": "hdrify Ultra HDR converter",
+      "url": "https://hdrify-web.vercel.app/",
+      "description": "A free, in-browser Ultra HDR converter. It adds a gain map to any photo so the image renders far brighter than SDR white on HDR displays, while falling back to the untouched original everywhere else. The conversion runs entirely on your device — nothing is uploaded.",
+      "applicationCategory": "MultimediaApplication",
+      "applicationSubCategory": "Photo editor",
+      "operatingSystem": "Any (runs in a modern web browser)",
+      "browserRequirements": "Requires a modern browser with Canvas and ES modules. An HDR display is needed to see the effect.",
+      "isAccessibleForFree": true,
+      "image": "https://hdrify-web.vercel.app/og.png",
+      "screenshot": "https://hdrify-web.vercel.app/og.png",
+      "license": "https://opensource.org/licenses/MIT",
+      "softwareHelp": "https://hdrify-web.vercel.app/#what-is-ultra-hdr",
+      "featureList": [
+        "Convert JPEG, PNG or WebP photos to Ultra HDR gain-map JPEG",
+        "Adjustable brightness boost above SDR white",
+        "Highlights-only knee, per-channel warmth, vividness and bloom controls",
+        "Untouched, Golden, Neon and Blowout presets",
+        "Runs entirely client-side — no upload, no signup, no watermark"
+      ],
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://hdrify-web.vercel.app/#website",
+      "url": "https://hdrify-web.vercel.app/",
+      "name": "hdrify",
+      "description": "Free in-browser Ultra HDR converter — make any photo glow past white.",
+      "inLanguage": "en"
+    },
+    {
+      "@type": "HowTo",
+      "@id": "https://hdrify-web.vercel.app/#howto",
+      "name": "How to convert a photo to Ultra HDR",
+      "description": "Turn an ordinary photo into an Ultra HDR gain-map JPEG that renders brighter than white on HDR displays.",
+      "totalTime": "PT1M",
+      "step": [
+        {
+          "@type": "HowToStep",
+          "name": "Add your photo",
+          "text": "Drop a JPEG, PNG or WebP onto the page, or click to pick one. The file is read locally and is never uploaded.",
+          "url": "https://hdrify-web.vercel.app/#stage"
+        },
+        {
+          "@type": "HowToStep",
+          "name": "Choose a preset",
+          "text": "Untouched keeps the photo faithful and simply renders it brighter. Golden, Neon and Blowout grade the HDR layer for a warm, cool or overexposed look."
+        },
+        {
+          "@type": "HowToStep",
+          "name": "Set the brightness boost",
+          "text": "The boost is how many times above SDR white the picture renders. Around 8 to 16 times reads as convincingly bright without looking broken on modest displays."
+        },
+        {
+          "@type": "HowToStep",
+          "name": "Check the preview on an HDR display",
+          "text": "View the right-hand preview on an HDR screen with brightness not at maximum. A display already at peak brightness has no headroom left to boost into."
+        },
+        {
+          "@type": "HowToStep",
+          "name": "Download the Ultra HDR JPEG",
+          "text": "You get a single .jpg containing the SDR base image, the gain map, XMP metadata and an MPF index. Anything that cannot read gain maps shows your original photo.",
+          "url": "https://hdrify-web.vercel.app/#how-to"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://hdrify-web.vercel.app/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is hdrify free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes — completely free, with no account, no export limit, no resolution cap and no watermark. It is an open-source static page; the conversion happens on your own device, so there is nothing for anyone to charge for."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does my photo get uploaded to a server?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. The encoder runs entirely in your browser tab. There is no backend. Your image never leaves your device, which you can confirm in your browser's network inspector."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why does my converted photo look exactly the same?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Almost always one of three reasons: your display is not HDR-capable; your screen brightness is already at maximum, so there is no headroom left to boost into; or you are viewing it in software that ignores gain maps, such as Firefox at the time of writing. Turn the brightness down a few notches and view it in Chrome or Safari on an HDR display."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Will an Ultra HDR file look wrong on old phones or SDR monitors?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Decoders that do not understand the gain map simply display the base JPEG, which is your original photo. That backwards compatibility is the entire point of the format, so the file is always safe to send to anyone."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does the glow survive uploading to LinkedIn, Instagram or WhatsApp?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "LinkedIn profile pictures destroy it — we measured the upload being re-encoded to 100x100 pixels at roughly 4 KB with all metadata stripped. Most services that re-encode uploads strip gain maps the same way. Instagram and Threads have added HDR photo support, but whether a given upload keeps it depends on the client and upload path, and using the in-app editor generally re-renders to SDR. Direct transfers such as AirDrop, cloud links and email attachments preserve the file intact."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does hdrify change the colours of my photo?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Not on the default Untouched preset. It applies a flat multiplier in linear light, which is mathematically incapable of altering hue, saturation or contrast ratios — the picture is identical, just rendered brighter. The warmth, vividness, knee and bloom controls do change the look, but only inside the HDR layer; the SDR fallback stays your original photo either way."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the difference between Ultra HDR and an HDR photo from my camera?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A camera HDR mode usually merges several exposures into one well-exposed SDR image. Ultra HDR is about display: it stores extra brightness information so a capable screen can render highlights above SDR white. hdrify does not invent detail your photo never had — it maps the photo you have into your display's headroom."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What file formats can I put in, and what comes out?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Anything your browser can decode as an image goes in — JPEG, PNG, WebP, and usually HEIC on Apple platforms. What comes out is always a single .jpg: an Ultra HDR JPEG containing your SDR base image, the gain map, XMP metadata and an MPF index."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I convert video too?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Not in the browser. The companion command-line tool, hdrify.py in the GitHub repository, handles video by encoding HEVC 10-bit PQ (smpte2084)."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+
 <script type="module" src="./app.js"></script>
+<script>
+/* Keyboard activation for the drop zone (it is a div so it can also be a drop target).
+   Purely an accessibility affordance — the encoder and all other wiring live in app.js. */
+document.getElementById('drop').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('file').click() }
+})
+</script>
+</body>
 </html>
