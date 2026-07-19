@@ -1,4 +1,5 @@
 import { encodeJPEGMetadata } from './vendor/libultrahdr.js'
+import { trackOnce } from './analytics.js'
 
 // ---------------------------------------------------------------- helpers --
 
@@ -41,6 +42,78 @@ function boxBlur(src, w, h, r, passes = 3) {
   return a
 }
 
+// ------------------------------------------------- ISO 21496-1 signalling --
+//
+// The vendored JS library writes only the legacy Adobe `hdrgm` XMP. Google's own
+// libultrahdr writes that AND an ISO 21496-1 APP2 segment — and the ISO one is
+// what Apple and current Chrome actually read to decide a JPEG is HDR. Without
+// it the file parses fine and renders as plain SDR: no glow.
+//
+// Layout ported from libultrahdr lib/src/gainmapmetadata.cpp
+// (uhdr_gainmap_metadata_frac::encodeGainmapMetadata), big-endian throughout.
+
+const ISO_URN = 'urn:iso:std:iso:ts:21496:-1'
+const FRAC_D = 1000000              // fixed denominator for the N/D rationals
+
+function isoIdentifier() {
+  const id = new Uint8Array(ISO_URN.length + 1)
+  for (let i = 0; i < ISO_URN.length; i++) id[i] = ISO_URN.charCodeAt(i)
+  return id                          // NUL-terminated
+}
+
+/** Build the ISO 21496-1 gain map metadata payload (goes in the gain map image). */
+function isoGainMapMetadata({ min, max, gamma = 1, baseOffset = 0, altOffset = 0,
+                              headroomMin = 0, headroomMax, useBaseColorSpace = true }) {
+  const b = []
+  const u8 = v => b.push(v & 0xff)
+  const u16 = v => { b.push((v >> 8) & 0xff, v & 0xff) }
+  const u32 = v => { b.push((v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff) }
+  const s32 = v => u32(v | 0)
+  const n = v => Math.round(v * FRAC_D) | 0
+
+  u16(0)                             // minimum_version
+  u16(0)                             // writer_version
+
+  // bit7 = multi-channel. We always write three channels: the gain map is RGB,
+  // so per-channel grading (warmth) lives in the pixels and must not be
+  // collapsed to a single channel by the decoder.
+  u8(0x80 | (useBaseColorSpace ? 0x40 : 0))
+
+  u32(n(headroomMin)); u32(FRAC_D)   // base_hdr_headroom      (numerator, denominator)
+  u32(n(headroomMax)); u32(FRAC_D)   // alternate_hdr_headroom
+
+  for (let c = 0; c < 3; c++) {
+    s32(n(min));        u32(FRAC_D)  // gain_map_min
+    s32(n(max));        u32(FRAC_D)  // gain_map_max
+    u32(n(gamma));      u32(FRAC_D)  // gain_map_gamma
+    s32(n(baseOffset)); u32(FRAC_D)  // base_offset
+    s32(n(altOffset));  u32(FRAC_D)  // alternate_offset
+  }
+  return new Uint8Array(b)
+}
+
+/** Splice an APP2 segment carrying `payload` in immediately after the SOI. */
+function insertApp2(jpeg, payload) {
+  if (!(jpeg[0] === 0xFF && jpeg[1] === 0xD8)) throw new Error('not a JPEG')
+  const len = payload.length + 2                       // length field includes itself
+  if (len > 0xFFFF) throw new Error('APP2 segment too large')
+  const out = new Uint8Array(jpeg.length + 4 + payload.length)
+  out.set(jpeg.subarray(0, 2), 0)
+  out[2] = 0xFF; out[3] = 0xE2
+  out[4] = (len >> 8) & 0xff; out[5] = len & 0xff
+  out.set(payload, 6)
+  out.set(jpeg.subarray(2), 6 + payload.length)
+  return out
+}
+
+function concat(...parts) {
+  const total = parts.reduce((s, p) => s + p.length, 0)
+  const out = new Uint8Array(total)
+  let o = 0
+  for (const p of parts) { out.set(p, o); o += p.length }
+  return out
+}
+
 function canvasToJpeg(canvas, quality) {
   return new Promise(res => canvas.toBlob(b => b.arrayBuffer().then(
     ab => res({ data: new Uint8Array(ab), mimeType: 'image/jpeg', width: canvas.width, height: canvas.height })
@@ -61,14 +134,23 @@ function canvasToJpeg(canvas, quality) {
  * saturation and contrast — the picture just renders brighter.
  */
 export async function buildUltraHDR(imageBitmap, opts) {
-  const { boost = 16, knee = 0, warmth = 0, vivid = 1, glow = 0, quality = 0.92 } = opts
-  const w = imageBitmap.width, h = imageBitmap.height
+  const { boost = 16, knee = 0, warmth = 0, vivid = 1, glow = 0, quality = 0.92,
+          maxSize = 0 } = opts
+
+  // Previews encode at a reduced size. The per-pixel work here is real — a 12 MP
+  // photo with bloom is ~13s of blocked main thread — so dragging a slider must
+  // never trigger a full-resolution encode. Downloads pass maxSize: 0.
+  let w = imageBitmap.width, h = imageBitmap.height
+  if (maxSize && Math.max(w, h) > maxSize) {
+    const k = maxSize / Math.max(w, h)
+    w = Math.max(2, Math.round(w * k)); h = Math.max(2, Math.round(h * k))
+  }
   const n = w * h
 
   const cv = document.createElement('canvas')
   cv.width = w; cv.height = h
   const ctx = cv.getContext('2d', { willReadFrequently: true })
-  ctx.drawImage(imageBitmap, 0, 0)
+  ctx.drawImage(imageBitmap, 0, 0, w, h)
   const px = ctx.getImageData(0, 0, w, h).data
 
   // linear light of the SDR base
@@ -158,6 +240,16 @@ export async function buildUltraHDR(imageBitmap, opts) {
     canvasToJpeg(gmCanvas, quality),
   ])
 
+  // Add the ISO 21496-1 signalling the vendored library omits. The base image
+  // carries a bare marker; the gain map carries the actual metadata. Both go in
+  // before the container is assembled, so the MPF offsets account for them.
+  const id = isoIdentifier()
+  sdr.data = insertApp2(sdr.data, concat(id, new Uint8Array(4)))
+  gainMap.data = insertApp2(gainMap.data, concat(id, isoGainMapMetadata({
+    min: lo, max: hi, gamma: 1, baseOffset: 0, altOffset: 0,
+    headroomMin: 0, headroomMax: Math.max(0, hi),
+  })))
+
   const jpeg = encodeJPEGMetadata({
     sdr,
     gainMap,
@@ -188,7 +280,7 @@ const ctl = {
   boost: $('#boost'), knee: $('#knee'), warmth: $('#warmth'),
   vivid: $('#vivid'), glow: $('#glow'),
 }
-let bitmap = null, fileName = 'image', outBlob = null, outURL = null, seq = 0, timer = null
+let bitmap = null, fileName = 'image', outURL = null, seq = 0, timer = null
 
 function fmt() {
   $('#o-boost').textContent = (+ctl.boost.value).toFixed(1) + '×'
@@ -211,24 +303,36 @@ function schedule(delay = 140) {
   timer = setTimeout(render, delay)
 }
 
+const PREVIEW_MAX = 700
+
 async function render() {
   const my = ++seq
   const frame = $('#fb')
   frame.classList.add('busy')
+  $('#status').textContent = 'rendering…'
+  // yield so the busy state paints before we block on encoding. Deliberately
+  // NOT requestAnimationFrame: rAF is suspended in background/unfocused tabs,
+  // which would hang the render forever.
+  await new Promise(r => setTimeout(r, 0))
   try {
-    const blob = await buildUltraHDR(bitmap, opts())
+    const blob = await buildUltraHDR(bitmap, { ...opts(), maxSize: PREVIEW_MAX })
     if (my !== seq) return
-    outBlob = blob
     if (outURL) URL.revokeObjectURL(outURL)
     outURL = URL.createObjectURL(blob)
     frame.innerHTML = `<img src="${outURL}">`
     $('#dl').disabled = false
-    $('#status').textContent = `live · ${(+ctl.boost.value).toFixed(1)}× above SDR white · ${(blob.size / 1024 | 0)} KB`
+    trackOnce('rendered')
+    const scaled = Math.max(bitmap.width, bitmap.height) > PREVIEW_MAX
+    $('#status').textContent = `live · ${(+ctl.boost.value).toFixed(1)}× above SDR white`
+      + (scaled ? ' · preview downscaled, download is full size' : '')
     $('#error').textContent = ''
   } catch (e) {
     $('#error').textContent = e.message
   } finally {
-    if (my === seq) frame.classList.remove('busy')
+    if (my === seq) {
+      frame.classList.remove('busy')
+      if ($('#status').textContent === 'rendering…') $('#status').textContent = 'ready'
+    }
   }
 }
 
@@ -245,6 +349,7 @@ async function load(file) {
   $('#compare').style.display = 'grid'
   $('#fa').innerHTML = `<img src="${URL.createObjectURL(file)}">`
   $('#status').textContent = `${file.name} · ${bitmap.width}×${bitmap.height}`
+  trackOnce('image-loaded', `${bitmap.width}x${bitmap.height}`)
   schedule(0)
 }
 
@@ -273,17 +378,33 @@ $('#drop').ondrop = e => { e.preventDefault(); $('#drop').classList.remove('on')
 document.body.addEventListener('dragover', e => e.preventDefault())
 document.body.addEventListener('drop', e => { e.preventDefault(); if (!bitmap) load(e.dataTransfer.files[0]) })
 
-$('#dl').onclick = () => {
-  if (!outBlob) return
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(outBlob)
-  a.download = `${fileName}_hdr.jpg`
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000)
+$('#dl').onclick = async () => {
+  if (!bitmap) return
+  const btn = $('#dl')
+  const label = btn.textContent
+  btn.disabled = true
+  btn.textContent = 'Rendering full size…'
+  await new Promise(r => setTimeout(r, 0))
+  try {
+    // the preview was downscaled — encode the real thing now
+    const full = await buildUltraHDR(bitmap, { ...opts(), maxSize: 0 })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(full)
+    a.download = `${fileName}_hdr.jpg`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000)
+    $('#status').textContent = `downloaded · ${(full.size / 1024 | 0)} KB · ${bitmap.width}×${bitmap.height}`
+    trackOnce('downloaded', `boost=${ctl.boost.value}`)
+  } catch (e) {
+    $('#error').textContent = e.message
+  } finally {
+    btn.disabled = false
+    btn.textContent = label
+  }
 }
 
 $('#reset').onclick = () => {
-  bitmap = null; outBlob = null
+  bitmap = null
   $('#compare').style.display = 'none'
   $('#drop').classList.remove('hide')
   $('#fa').innerHTML = $('#fb').innerHTML = ''
