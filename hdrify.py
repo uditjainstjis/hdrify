@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""hdrify — turn any image or video into super-bright HDR media that glows on
+MacBook XDR / iPhone displays (and falls back gracefully everywhere else).
+
+Images -> Ultra HDR JPEG (SDR base + ISO gain map, via libultrahdr)
+Videos -> HEVC 10-bit PQ MP4 (via ffmpeg), same trick as dtinth/superwhite
+
+Requires: brew install libultrahdr ffmpeg   +   pip install pillow numpy
+"""
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff", ".bmp"}
+VIDEO_EXT = {".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv", ".gif"}
+
+
+def _need(binary):
+    if not shutil.which(binary):
+        sys.exit(f"missing dependency: {binary} (try: brew install {binary})")
+
+
+# ---------------------------------------------------------------- images ----
+
+def _box_blur(a, r, np, passes=3):
+    """Separable box blur, repeated -> close enough to a gaussian, no scipy needed."""
+    for _ in range(passes):
+        for axis in (0, 1):
+            pad = [(0, 0)] * a.ndim
+            pad[axis] = (r, r)
+            p = np.pad(a, pad, mode="edge")
+            c = np.cumsum(p, axis=axis)
+            lo = [slice(None)] * a.ndim
+            hi = [slice(None)] * a.ndim
+            lo[axis] = slice(0, a.shape[axis])
+            hi[axis] = slice(2 * r, 2 * r + a.shape[axis])
+            a = (c[tuple(hi)] - c[tuple(lo)]) / (2.0 * r)
+    return a
+
+
+
+def hdrify_image(src, dst, boost=16.0, knee=0.0, warmth=0.0, vivid=1.0,
+                 glow=0.0, quality=95):
+    """Build an Ultra HDR JPEG: untouched SDR base + a gain map that drives the picture
+    above SDR white on HDR displays.
+
+    boost  flat multiplier in linear light. On its own (everything else default) the
+           picture is pixel-for-pixel identical — same hue, saturation, contrast —
+           just rendered `boost`x above SDR white.
+
+    Everything below grades the HDR layer ONLY. The SDR base stays original, so on a
+    non-HDR screen none of it shows up; it's a look that exists only in the highlights
+    of an HDR render.
+
+    knee   0 = lift the whole image. >0 holds shadows/mids at SDR and spends the boost
+           on bright areas only, so highlights bloom out of a normal-looking picture.
+    warmth -1..+1. Splits the gain per channel (this is what made your face glow orange:
+           red boosted harder than blue). + = warm/golden, - = cool/blue.
+    vivid  saturation of the HDR intent. 1 = untouched, >1 pushes colour harder as it
+           brightens, <1 lets highlights bleach toward white.
+    glow   0..1. Adds a soft bloom of the bright areas into the HDR layer, so light
+           spills off edges the way real overexposure does."""
+    import numpy as np
+    from PIL import Image
+
+    _need("ultrahdr_app")
+    im = Image.open(src).convert("RGB")
+    w, h = im.size
+    # libultrahdr wants even dimensions
+    if w % 2 or h % 2:
+        w, h = w - (w % 2), h - (h % 2)
+        im = im.crop((0, 0, w, h))
+
+    s = np.asarray(im).astype(np.float32) / 255.0
+    lin = np.where(s <= 0.04045, s / 12.92, ((s + 0.055) / 1.055) ** 2.4)
+
+    LUMA = np.array([0.2126, 0.7152, 0.0722], np.float32)
+    lum = (lin @ LUMA)[..., None]
+
+    # --- how much of the boost each pixel receives ---------------------------
+    if knee <= 0:
+        t = np.float32(1.0)                       # everything, evenly
+    else:
+        t = np.clip((lum - knee) / max(1e-6, 1.0 - knee), 0, 1)
+    gain = 1.0 + (boost - 1.0) * t
+
+    # --- split that gain across channels: the "orange face" knob -------------
+    if warmth:
+        w_ = float(np.clip(warmth, -1, 1))
+        tint = np.array([1.0 + 0.45 * w_, 1.0, 1.0 - 0.45 * w_], np.float32)
+        gain = gain * tint
+
+    hdr = lin * gain
+
+    # --- saturation of the HDR intent ---------------------------------------
+    if vivid != 1.0:
+        g = (hdr @ LUMA)[..., None]
+        hdr = np.clip(g + (hdr - g) * float(vivid), 0, None)
+
+    # --- optional bloom: bright areas spill light into their surroundings ----
+    if glow > 0:
+        bright = np.clip(hdr - 1.0, 0, None)      # only what exceeds SDR white
+        r = max(1, int(min(w, h) / 90))
+        blurred = _box_blur(bright, r, np)        # 3 box passes ~= gaussian
+        hdr = hdr + blurred * float(glow) * 1.4
+
+    # the real per-pixel gain after grading, so the gain map advertises the truth
+    peak = float(np.max(hdr / np.maximum(lin, 1e-6)))
+    peak = float(np.clip(peak, boost, 64.0))
+
+    with tempfile.TemporaryDirectory() as td:
+        raw = os.path.join(td, "hdr.rgbaf16")
+        sdr = os.path.join(td, "sdr.jpg")
+        np.concatenate([hdr, np.ones((h, w, 1), np.float32)], 2).astype(np.float16).tofile(raw)
+        if os.path.splitext(src)[1].lower() in (".jpg", ".jpeg") and (w, h) == Image.open(src).size:
+            shutil.copyfile(src, sdr)  # keep the original bytes as the SDR base
+        else:
+            im.save(sdr, quality=quality, subsampling=0)
+        subprocess.run(
+            ["ultrahdr_app", "-m", "0", "-p", raw, "-a", "4", "-t", "0",
+             "-w", str(w), "-h", str(h), "-i", sdr,
+             "-C", "1", "-c", "0", "-K", f"{peak:.4f}", "-L", "10000",
+             "-q", str(quality), "-z", dst],
+            check=True, capture_output=True)
+    return dst
+
+
+# ---------------------------------------------------------------- videos ----
+
+def _pq_expr(nits):
+    """ffmpeg lutrgb expression: sRGB code value -> PQ code value at `nits`."""
+    lin = "if(lte(val/maxval,0.04045),(val/maxval)/12.92,pow(((val/maxval)+0.055)/1.055,2.4))"
+    y = f"({lin})*{nits / 10000.0:.9f}"
+    n = f"pow({y},0.1593017578125)"
+    return f"clip(pow((0.8359375+18.8515625*{n})/(1+18.6875*{n}),78.84375)*maxval,0,maxval)"
+
+
+def hdrify_video(src, dst, nits=1600, crf=18):
+    _need("ffmpeg")
+    e = _pq_expr(nits)
+    vf = (f"format=rgb48,lutrgb=r='{e}':g='{e}':b='{e}',"
+          "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p10le")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", src, "-vf", vf,
+         "-c:v", "libx265", "-crf", str(crf), "-preset", "medium",
+         "-pix_fmt", "yuv420p10le", "-tag:v", "hvc1",
+         "-color_primaries", "bt709", "-color_trc", "smpte2084",
+         "-colorspace", "bt709",
+         "-x265-params",
+         "colorprim=bt709:transfer=smpte2084:colormatrix=bt709",
+         "-c:a", "copy", "-movflags", "+faststart", dst],
+        check=True, capture_output=True)
+    return dst
+
+
+# ------------------------------------------------------------------ entry ----
+
+def hdrify(src, dst=None, boost=16.0, knee=0.0, nits=1600, warmth=0.0, vivid=1.0, glow=0.0):
+    ext = os.path.splitext(src)[1].lower()
+    if ext in IMAGE_EXT:
+        dst = dst or os.path.splitext(src)[0] + "_hdr.jpg"
+        return hdrify_image(src, dst, boost=boost, knee=knee, warmth=warmth, vivid=vivid, glow=glow)
+    if ext in VIDEO_EXT:
+        dst = dst or os.path.splitext(src)[0] + "_hdr.mp4"
+        return hdrify_video(src, dst, nits=nits)
+    sys.exit(f"unsupported file type: {ext}")
+
+
+def main():
+    p = argparse.ArgumentParser(description="make an image or video glow on HDR displays")
+    p.add_argument("input")
+    p.add_argument("-o", "--output")
+    p.add_argument("--boost", type=float, default=16.0, help="image: x above SDR white (default 16 = max)")
+    p.add_argument("--knee", type=float, default=0.0, help="image: 0=lift everything, 0.5=highlights only")
+    p.add_argument("--nits", type=float, default=1600, help="video: nits for SDR white (default 1600 = MacBook XDR peak)")
+    p.add_argument("--warmth", type=float, default=0.0, help="image: -1 cool .. +1 warm/golden")
+    p.add_argument("--vivid", type=float, default=1.0, help="image: HDR saturation, 1 = untouched")
+    p.add_argument("--glow", type=float, default=0.0, help="image: 0-1 bloom off the highlights")
+    a = p.parse_args()
+    print(hdrify(a.input, a.output, boost=a.boost, knee=a.knee, nits=a.nits,
+                 warmth=a.warmth, vivid=a.vivid, glow=a.glow))
+
+
+if __name__ == "__main__":
+    main()

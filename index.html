@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang=en>
+<meta charset=utf-8>
+<title>hdrify — make any photo glow past white</title>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=description content="Turn any photo into an Ultra HDR JPEG that renders far above SDR white on HDR displays. Runs entirely in your browser — nothing is uploaded.">
+<style>
+:root{color-scheme:dark;--bg:#08080a;--line:#232329;--dim:#7d7d87;--fg:#ececf0;--acc:#8b7bff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+     font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+       padding:20px 28px;border-bottom:1px solid var(--line)}
+h1{font-size:16px;margin:0;letter-spacing:-.01em}
+header span{color:var(--dim);font-size:13px}
+header .spacer{flex:1}
+header a{color:var(--dim);font-size:12.5px;text-decoration:none}
+header a:hover{color:var(--fg)}
+main{display:grid;grid-template-columns:1fr 320px;min-height:calc(100vh - 61px)}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+
+#stage{padding:28px;display:grid;place-items:center;place-content:center}
+#drop{width:100%;max-width:640px;border:1.5px dashed var(--line);border-radius:16px;
+      padding:72px 24px;text-align:center;color:var(--dim);cursor:pointer;transition:.15s}
+#drop:hover,#drop.on{border-color:var(--acc);color:var(--fg);background:#101017}
+#drop b{display:block;color:var(--fg);font-weight:500;margin-bottom:6px}
+
+#compare{display:none;width:100%;gap:20px;grid-template-columns:1fr 1fr}
+@media(max-width:640px){#compare{grid-template-columns:1fr}}
+figure{margin:0;display:flex;flex-direction:column;gap:8px;min-width:0}
+figcaption{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+figcaption b{color:var(--fg);font-weight:500;letter-spacing:0;text-transform:none}
+.frame{background:#000;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+       display:grid;place-items:center;min-height:220px;position:relative}
+.frame img{display:block;max-width:100%;max-height:62vh;width:auto}
+.frame.busy::after{content:"";position:absolute;inset:0;background:#0007}
+
+aside{border-left:1px solid var(--line);padding:24px;display:flex;flex-direction:column;gap:22px}
+@media(max-width:900px){aside{border-left:0;border-top:1px solid var(--line)}}
+.ctl{display:flex;flex-direction:column;gap:7px}
+.ctl .top{display:flex;justify-content:space-between;align-items:baseline}
+.ctl label{font-size:13px}
+.ctl output{font-variant-numeric:tabular-nums;color:var(--acc);font-size:13px}
+.ctl small{color:var(--dim);font-size:11.5px;line-height:1.45}
+input[type=range]{width:100%;accent-color:var(--acc);margin:0}
+button{background:var(--acc);color:#0b0b10;border:0;border-radius:9px;padding:11px 14px;
+       font:inherit;font-weight:600;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-weight:400}
+#presets{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:#141419;color:var(--dim);border:1px solid var(--line);border-radius:999px;
+      padding:6px 13px;font-size:12.5px;font-weight:400}
+.chip:hover{color:var(--fg);border-color:var(--acc)}
+.note{color:var(--dim);font-size:11.5px;line-height:1.5;border-top:1px solid var(--line);padding-top:16px}
+.err{color:#ff8080;font-size:12.5px}
+.hide{display:none!important}
+</style>
+
+<header>
+  <h1>hdrify</h1>
+  <span id=status>drop an image to begin</span>
+  <span class=spacer></span>
+  <a href="https://github.com/uditjainstjis/hdrify" target=_blank rel=noopener>source</a>
+</header>
+
+<main>
+  <section id=stage>
+    <div id=drop>
+      <b>Drop an image here</b>
+      or click to pick — it never leaves your device
+      <input type=file id=file hidden accept="image/*">
+    </div>
+    <div id=compare>
+      <figure><figcaption>Original · <b>SDR</b></figcaption>
+        <div class=frame id=fa></div></figure>
+      <figure><figcaption>hdrify · <b>Ultra HDR</b></figcaption>
+        <div class=frame id=fb></div></figure>
+    </div>
+  </section>
+
+  <aside>
+    <div id=presets></div>
+
+    <div class=ctl>
+      <div class=top><label for=boost>Brightness boost</label><output id=o-boost>16.0×</output></div>
+      <input type=range id=boost min=1 max=64 step=.5 value=16>
+      <small>Flat gain in linear light — colours and contrast stay pixel-identical, the whole
+      picture just renders this many times above SDR white.</small>
+    </div>
+
+    <div class=ctl>
+      <div class=top><label for=knee>Highlights only</label><output id=o-knee>off</output></div>
+      <input type=range id=knee min=0 max=.9 step=.05 value=0>
+      <small>Above 0 the boost is spent on bright areas only, so highlights bloom out of an
+      otherwise normal picture.</small>
+    </div>
+
+    <div class=ctl>
+      <div class=top><label for=warmth>Warmth</label><output id=o-warmth>0.00</output></div>
+      <input type=range id=warmth min=-1 max=1 step=.05 value=0>
+      <small>Splits the boost per channel — the golden/orange cast. Graded into the HDR layer
+      only, so the SDR fallback stays neutral.</small>
+    </div>
+
+    <div class=ctl>
+      <div class=top><label for=vivid>Vividness</label><output id=o-vivid>1.00</output></div>
+      <input type=range id=vivid min=0 max=2.5 step=.05 value=1>
+      <small>Saturation of the HDR intent. Below 1 the highlights bleach toward white.</small>
+    </div>
+
+    <div class=ctl>
+      <div class=top><label for=glow>Bloom</label><output id=o-glow>off</output></div>
+      <input type=range id=glow min=0 max=1 step=.05 value=0>
+      <small>Light spilling off the bright areas, the way real overexposure blooms.</small>
+    </div>
+
+    <button id=dl disabled>Download HDR image</button>
+    <button class=ghost id=reset>New image</button>
+    <div id=error class=err></div>
+
+    <div class=note>
+      Everything runs locally in this tab — no upload, no server.<br><br>
+      The preview only glows in <b>Chrome or Safari on an HDR display</b>, and only when screen
+      brightness is <b>not</b> at maximum — macOS needs headroom to render above white. The file
+      is still correct either way; on an SDR screen it falls back to the original image.
+    </div>
+  </aside>
+</main>
+
+<script type="module" src="./app.js"></script>
+</html>
