@@ -3,7 +3,7 @@
 <meta charset=utf-8>
 <title>hdrify — make any photo glow past white</title>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<meta name=description content="Turn any photo into an Ultra HDR JPEG that renders far above SDR white on HDR displays. Runs entirely in your browser — nothing is uploaded.">
+<meta name=description content="Turn any photo into an Ultra HDR JPEG that renders far above SDR white on Android, MacBook XDR and iPhone. Runs entirely in your browser — nothing is uploaded.">
 <style>
 :root{color-scheme:dark;--bg:#08080a;--line:#232329;--dim:#7d7d87;--fg:#ececf0;--acc:#8b7bff}
 *{box-sizing:border-box}
@@ -24,6 +24,7 @@ main{display:grid;grid-template-columns:1fr 320px;min-height:calc(100vh - 61px)}
       padding:72px 24px;text-align:center;color:var(--dim);cursor:pointer;transition:.15s}
 #drop:hover,#drop.on{border-color:var(--acc);color:var(--fg);background:#101017}
 #drop b{display:block;color:var(--fg);font-weight:500;margin-bottom:6px}
+#drop .sub{display:inline-block;margin-top:10px;font-size:12px;color:#5f5f68}
 
 #compare{display:none;width:100%;gap:20px;grid-template-columns:1fr 1fr}
 @media(max-width:640px){#compare{grid-template-columns:1fr}}
@@ -67,7 +68,8 @@ button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line
   <section id=stage>
     <div id=drop>
       <b>Drop an image here</b>
-      or click to pick — it never leaves your device
+      or click to pick — it never leaves your device<br>
+      <span class=sub>Glows on Android 14+, MacBook XDR, iPhone &amp; iPad</span>
       <input type=file id=file hidden accept="image/*">
     </div>
     <div id=compare>
@@ -120,9 +122,12 @@ button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line
 
     <div class=note>
       Everything runs locally in this tab — no upload, no server.<br><br>
-      The preview only glows in <b>Chrome or Safari on an HDR display</b>, and only when screen
-      brightness is <b>not</b> at maximum — macOS needs headroom to render above white. The file
-      is still correct either way; on an SDR screen it falls back to the original image.
+      <b>Where it glows:</b> Android 14+ (Ultra HDR is Google's own format — it's native there),
+      macOS Sonoma+, iOS 18+. Anywhere else the file falls back to your original photo, so it's
+      always safe to send.<br><br>
+      <b>If the preview looks flat:</b> you need Chrome or Safari on an HDR display, with screen
+      brightness <b>not</b> at maximum — a display already at peak has no headroom left to boost
+      into. This applies on Android too.
     </div>
   </aside>
 </main>

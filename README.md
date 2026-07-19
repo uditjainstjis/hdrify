@@ -1,7 +1,7 @@
 # hdrify
 
-Make any photo render **far brighter than white** on HDR displays — MacBook XDR, iPhone,
-recent iPads. Runs entirely in your browser. Nothing is uploaded.
+Make any photo render **far brighter than white** on HDR displays — Android, MacBook XDR,
+iPhone, iPad. Runs entirely in your browser. Nothing is uploaded.
 
 **→ [Try it](https://uditjainstjis.github.io/hdrify/)**
 
@@ -35,11 +35,24 @@ contrast. The picture is pixel-identical; it just renders many times above SDR w
 Warmth, vividness and bloom grade the **HDR layer only**. The SDR base stays your original
 file, so on a non-HDR screen none of it shows up.
 
+## Where it glows
+
+| Platform | Renders it |
+|---|---|
+| Android 14+ on an HDR panel | Yes — Ultra HDR is Google's format, native here |
+| macOS Sonoma+ / iOS 18+ | Yes |
+| Older Android, SDR panels, everything else | Falls back to your original photo |
+
+This is exactly why the image path uses Ultra HDR JPEG rather than an HDR video like
+[superwhite](https://github.com/dtinth/superwhite): a video only plays where a player
+exists, while this is a plain `.jpg` that degrades gracefully everywhere it isn't
+understood.
+
 ## Seeing it work
 
 The preview needs **Chrome or Safari on an HDR display**, with screen brightness **not at
-maximum** — macOS only renders above SDR white when there's brightness headroom left. At
-100% brightness a perfectly good HDR file looks identical to the SDR one.
+maximum** — a display already at peak brightness has no headroom left to boost into, so a
+perfectly good HDR file looks identical to the SDR one. The same rule applies on Android.
 
 ## Where it survives
 
