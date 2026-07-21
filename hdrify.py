@@ -82,7 +82,13 @@ def hdrify_image(src, dst, boost=16.0, knee=0.0, warmth=0.0, vivid=1.0,
 
     # --- how much of the boost each pixel receives ---------------------------
     if knee <= 0:
-        t = np.float32(1.0)                       # everything, evenly
+        # A smooth luminance ramp, NOT a flat lift. A uniform boost makes the whole
+        # picture brighter, which an adaptive renderer (Preview) normalises straight
+        # back to looking normal — that is why flat files stopped glowing. Ramping
+        # 1x in shadows to `boost` in highlights leaves a differential the renderer
+        # cannot flatten. `t` is a scalar from luminance applied equally to R, G and
+        # B, so hue and saturation are untouched.
+        t = lum
     else:
         t = np.clip((lum - knee) / max(1e-6, 1.0 - knee), 0, 1)
     gain = 1.0 + (boost - 1.0) * t
@@ -113,9 +119,8 @@ def hdrify_image(src, dst, boost=16.0, knee=0.0, warmth=0.0, vivid=1.0,
     # precision where the boost actually lives — the image stops glowing.
     ratio = hdr / np.maximum(lin, 1e-6)
     peak = float(np.clip(np.max(ratio), boost, 64.0))
-    graded = knee > 0 or warmth != 0 or vivid != 1.0 or glow > 0
-    # ungraded: a flat map, every pixel at `boost`. graded: never darken below 1x.
-    floor = boost if not graded else 1.0
+    # The map always ranges now, so the floor is 1x (never darken below the base).
+    floor = 1.0
 
     with tempfile.TemporaryDirectory() as td:
         raw = os.path.join(td, "hdr.rgbaf16")

@@ -170,7 +170,10 @@ export async function buildUltraHDR(imageBitmap, opts) {
     const r = lin[j], g = lin[j + 1], b = lin[j + 2]
     const lum = r * LUMA[0] + g * LUMA[1] + b * LUMA[2]
     // how much of the boost this pixel receives
-    const t = knee <= 0 ? 1 : clamp((lum - knee) / Math.max(1e-6, 1 - knee), 0, 1)
+    // A smooth luminance ramp, not a flat lift: a uniform boost gets normalised
+    // away by adaptive renderers, so the picture stops glowing. A scalar `t` from
+    // luminance keeps hue and saturation exactly as they were.
+    const t = knee <= 0 ? lum : clamp((lum - knee) / Math.max(1e-6, 1 - knee), 0, 1)
     const gain = 1 + (boost - 1) * t
     hdr[j] = r * gain * tint[0]
     hdr[j + 1] = g * gain * tint[1]
@@ -215,7 +218,7 @@ export async function buildUltraHDR(imageBitmap, opts) {
   for (let i = 0, j = 0; i < n; i++, j += 3) {
     for (let c = 0; c < 3; c++) {
       const base = lin[j + c]
-      const g = base > 1e-6 ? hdr[j + c] / base : boost
+      const g = base > 1e-6 ? hdr[j + c] / base : 1
       const v = Math.log2(clamp(g, 1, 64))
       log2[j + c] = v
       if (v < lo) lo = v
