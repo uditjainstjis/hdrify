@@ -204,15 +204,19 @@ export async function buildUltraHDR(imageBitmap, opts) {
   // denormalises them against a range they weren't encoded with and the colour
   // comes out wrong. Per-channel grading still survives: the gain map itself is
   // RGB, so each channel carries its own value inside that shared range.
+  // Recovering the gain by dividing hdr/lin needs an epsilon for near-black
+  // pixels, and that epsilon distorts their ratio toward 1x — dragging the map's
+  // floor down to 1 even when every meaningful pixel is at `boost`. The map's 256
+  // levels then span the whole range instead of sitting where the boost is, and
+  // the image stops glowing. So fall back to the nominal gain wherever the source
+  // is too dark for the ratio to mean anything.
   const log2 = new Float32Array(n * 3)
   let lo = Infinity, hi = -Infinity
   for (let i = 0, j = 0; i < n; i++, j += 3) {
     for (let c = 0; c < 3; c++) {
-      // near-black pixels have a numerically meaningless ratio, and a gain
-      // below 1 would darken the HDR render — clamp both away so the range
-      // stays tight and precision isn't spent on noise
-      const s = Math.max(lin[j + c], 1e-4)
-      const v = Math.log2(clamp(hdr[j + c] / s, 1, 64))
+      const base = lin[j + c]
+      const g = base > 1e-6 ? hdr[j + c] / base : boost
+      const v = Math.log2(clamp(g, 1, 64))
       log2[j + c] = v
       if (v < lo) lo = v
       if (v > hi) hi = v

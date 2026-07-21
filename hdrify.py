@@ -107,9 +107,15 @@ def hdrify_image(src, dst, boost=16.0, knee=0.0, warmth=0.0, vivid=1.0,
         blurred = _box_blur(bright, r, np)        # 3 box passes ~= gaussian
         hdr = hdr + blurred * float(glow) * 1.4
 
-    # the real per-pixel gain after grading, so the gain map advertises the truth
-    peak = float(np.max(hdr / np.maximum(lin, 1e-6)))
-    peak = float(np.clip(peak, boost, 64.0))
+    # Bound the gain map's range explicitly. Letting libultrahdr derive the
+    # minimum from the data lands it near zero (-14 stops on a dark photo), which
+    # stretches the map's 256 levels across a huge range and leaves almost no
+    # precision where the boost actually lives — the image stops glowing.
+    ratio = hdr / np.maximum(lin, 1e-6)
+    peak = float(np.clip(np.max(ratio), boost, 64.0))
+    graded = knee > 0 or warmth != 0 or vivid != 1.0 or glow > 0
+    # ungraded: a flat map, every pixel at `boost`. graded: never darken below 1x.
+    floor = boost if not graded else 1.0
 
     with tempfile.TemporaryDirectory() as td:
         raw = os.path.join(td, "hdr.rgbaf16")
@@ -122,7 +128,8 @@ def hdrify_image(src, dst, boost=16.0, knee=0.0, warmth=0.0, vivid=1.0,
         subprocess.run(
             ["ultrahdr_app", "-m", "0", "-p", raw, "-a", "4", "-t", "0",
              "-w", str(w), "-h", str(h), "-i", sdr,
-             "-C", "1", "-c", "0", "-K", f"{peak:.4f}", "-L", "10000",
+             "-C", "1", "-c", "0",
+             "-k", f"{floor:.4f}", "-K", f"{peak:.4f}", "-L", "10000",
              "-q", str(quality), "-z", dst],
             check=True, capture_output=True)
     return dst
