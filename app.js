@@ -247,11 +247,17 @@ export async function buildUltraHDR(imageBitmap, opts) {
   // Add the ISO 21496-1 signalling the vendored library omits. The base image
   // carries a bare marker; the gain map carries the actual metadata. Both go in
   // before the container is assembled, so the MPF offsets account for them.
+  // hdrCapacityMax is the display headroom at which the FULL gain applies; a
+  // decoder scales the boost by how close the real display gets to it. Setting it
+  // to the content boost (16x) means a laptop with ~4x headroom applies only ~4x.
+  // Anchoring it at ~4.9x — the value the first build shipped, and the one that
+  // visibly glowed — makes that same laptop apply ~12x instead.
+  const CAPACITY_MAX = Math.log2(4.9261)
   const id = isoIdentifier()
   sdr.data = insertApp2(sdr.data, concat(id, new Uint8Array(4)))
   gainMap.data = insertApp2(gainMap.data, concat(id, isoGainMapMetadata({
     min: lo, max: hi, gamma: 1, baseOffset: 0, altOffset: 0,
-    headroomMin: 0, headroomMax: Math.max(0, hi),
+    headroomMin: 0, headroomMax: CAPACITY_MAX,
   })))
 
   const jpeg = encodeJPEGMetadata({
@@ -263,7 +269,7 @@ export async function buildUltraHDR(imageBitmap, opts) {
     gainMapMin: [lo, lo, lo],
     gainMapMax: [hi, hi, hi],
     hdrCapacityMin: 0,
-    hdrCapacityMax: Math.max(0, hi),
+    hdrCapacityMax: CAPACITY_MAX,
   })
   return new Blob([jpeg], { type: 'image/jpeg' })
 }

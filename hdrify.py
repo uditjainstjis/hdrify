@@ -43,7 +43,7 @@ def _box_blur(a, r, np, passes=3):
 
 
 def hdrify_image(src, dst, boost=16.0, knee=0.0, warmth=0.0, vivid=1.0,
-                 glow=0.0, quality=95):
+                 glow=0.0, quality=95, target_nits=1000.0):
     """Build an Ultra HDR JPEG: untouched SDR base + a gain map that drives the picture
     above SDR white on HDR displays.
 
@@ -129,7 +129,15 @@ def hdrify_image(src, dst, boost=16.0, knee=0.0, warmth=0.0, vivid=1.0,
             ["ultrahdr_app", "-m", "0", "-p", raw, "-a", "4", "-t", "0",
              "-w", str(w), "-h", str(h), "-i", sdr,
              "-C", "1", "-c", "0",
-             "-k", f"{floor:.4f}", "-K", f"{peak:.4f}", "-L", "10000",
+             "-k", f"{floor:.4f}", "-K", f"{peak:.4f}",
+             # -L is the target display peak; libultrahdr turns it into
+             # hdrCapacityMax = L / 203, and a decoder applies the gain only in
+             # proportion to how close the real display gets to that capacity.
+             # -L 10000 asks for 49x of headroom, so a laptop with ~4x applied a
+             # 16x map as 1.6x — no visible glow. 1000 nits (capacity ~4.9) is
+             # what the first build used, and it is the value that visibly
+             # glowed: a 4x display then applies ~90% of the boost.
+             "-L", f"{target_nits:.0f}",
              "-q", str(quality), "-z", dst],
             check=True, capture_output=True)
     return dst
